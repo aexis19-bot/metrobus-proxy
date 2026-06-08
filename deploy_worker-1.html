@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deploy Worker</title>
+<style>
+body{font-family:monospace;background:#0d0f14;color:#e8eaf0;padding:24px;max-width:480px;margin:0 auto}
+h2{color:#f5a623;margin-bottom:8px}
+p{font-size:13px;color:#636b80;margin-bottom:20px;line-height:1.5}
+.field{margin-bottom:14px}
+label{font-size:10px;color:#636b80;letter-spacing:.1em;display:block;margin-bottom:4px}
+input{width:100%;background:#141720;border:1px solid #1e2433;color:#e8eaf0;padding:10px;border-radius:6px;font-family:monospace;font-size:12px;box-sizing:border-box}
+input:focus{outline:none;border-color:#f5a623}
+button{width:100%;background:#f5a623;color:#000;border:none;padding:12px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;font-family:monospace}
+button:disabled{opacity:.5;cursor:default}
+#result{margin-top:16px;padding:12px;border-radius:6px;font-size:12px;display:none;line-height:1.6;white-space:pre-wrap}
+.ok{background:#1a2e1a;border:1px solid #3fcf60;color:#3fcf60}
+.err{background:#2e1a1a;border:1px solid #f55a5a;color:#f55a5a}
+</style>
+</head>
+<body>
+<h2>Deploy Proxy Worker</h2>
+<p>Pega tu API token de Cloudflare y toca Desplegar.</p>
+<div class="field"><label>ACCOUNT ID</label><input id="acct" value="38ada785f86d67141307507092e8fe9c" spellcheck="false"/></div>
+<div class="field"><label>API TOKEN</label><input id="tok" placeholder="cfut_..." spellcheck="false"/></div>
+<div class="field"><label>NOMBRE</label><input id="wname" value="metrobus-proxy" spellcheck="false"/></div>
+<button id="btn" onclick="deploy()">Desplegar Worker</button>
+<div id="result"></div>
+<script>
+const CODE = "export default {\n  async fetch(request, env) {\n    const url = new URL(request.url);\n    const target = \"https://metrobus-gtfs.sinopticoplus.com/gtfs-api\" + url.pathname + url.search;\n    const headers = new Headers(request.headers);\n    headers.delete(\"origin\");\n    headers.delete(\"referer\");\n    const response = await fetch(target, {\n      method: request.method,\n      headers: headers,\n      body: request.method !== \"GET\" ? request.body : undefined,\n    });\n    const nh = new Headers(response.headers);\n    nh.set(\"Access-Control-Allow-Origin\", \"*\");\n    nh.set(\"Access-Control-Allow-Headers\", \"*\");\n    nh.set(\"Access-Control-Allow-Methods\", \"GET, POST, OPTIONS\");\n    if (request.method === \"OPTIONS\") return new Response(null, { status: 204, headers: nh });\n    return new Response(response.body, { status: response.status, headers: nh });\n  }\n}";
+async function deploy(){
+  const acct=document.getElementById('acct').value.trim();
+  const tok=document.getElementById('tok').value.trim();
+  const wname=document.getElementById('wname').value.trim();
+  if(!acct||!tok||!wname){show('err','Llena todos los campos');return;}
+  const btn=document.getElementById('btn');
+  btn.disabled=true;btn.textContent='Desplegando...';
+  try{
+    // Use the script upload API with plain text body (legacy format, works without FormData)
+    const r=await fetch('https://api.cloudflare.com/client/v4/accounts/'+acct+'/workers/scripts/'+wname,{
+      method:'PUT',
+      headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/javascript'},
+      body:CODE
+    });
+    const d=await r.json();
+    if(d.success){
+      show('ok','Worker desplegado!\n\nURL del proxy:\nhttps://'+wname+'.'+acct.slice(0,8)+'.workers.dev\n\nCopia esa URL y mandala.');
+    }else{
+      show('err','Error: '+JSON.stringify(d.errors,null,2));
+    }
+  }catch(e){show('err','Error: '+e.message);}
+  btn.disabled=false;btn.textContent='Desplegar Worker';
+}
+function show(t,m){const e=document.getElementById('result');e.className=t;e.style.display='block';e.textContent=m;}
+</script>
+</body>
+</html>
