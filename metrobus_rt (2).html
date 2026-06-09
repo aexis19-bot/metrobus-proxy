@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Metrobús RT</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0d0f14;--panel:#141720;--border:#1e2433;--accent:#f5a623;--text:#e8eaf0;--muted:#636b80;--green:#3fcf60;--red:#f55a5a;--yellow:#f5c842}
+body{font-family:'Courier New',monospace;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+#topbar{background:var(--panel);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+#topbar h1{font-size:13px;font-weight:700;letter-spacing:.08em;color:var(--accent)}
+#dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0}
+#dot.live{background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2s infinite}
+#dot.err{background:var(--red)}
+#dot.busy{background:var(--yellow);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+#status{font-size:11px;color:var(--muted);flex:1}
+#refresh-btn{background:none;border:1px solid var(--border);color:var(--muted);padding:4px 9px;border-radius:4px;font-size:11px;cursor:pointer;font-family:inherit}
+#refresh-btn:hover{border-color:var(--accent);color:var(--accent)}
+#filters{background:var(--panel);border-bottom:1px solid var(--border);padding:7px 14px;display:flex;gap:5px;align-items:center;overflow-x:auto;scrollbar-width:none;flex-shrink:0}
+#filters::-webkit-scrollbar{display:none}
+.fl{font-size:10px;color:var(--muted);letter-spacing:.1em;flex-shrink:0}
+.lb{border:none;border-radius:4px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;opacity:.3;transition:opacity .15s;flex-shrink:0}
+.lb.on{opacity:1}
+.ba{background:var(--border);color:var(--text);border:1px solid var(--muted);border-radius:4px;padding:3px 9px;font-size:11px;cursor:pointer;font-family:inherit;flex-shrink:0}
+.ba.on{background:var(--accent);color:#000;border-color:var(--accent)}
+#map{flex:1;min-height:0}
+#stats{background:var(--panel);border-top:1px solid var(--border);padding:9px 14px;display:flex;gap:14px;align-items:center;flex-shrink:0;overflow-x:auto;scrollbar-width:none}
+#stats::-webkit-scrollbar{display:none}
+.sv{font-size:17px;font-weight:700;line-height:1}
+.sl{font-size:9px;color:var(--muted);letter-spacing:.1em}
+.ss{display:flex;flex-direction:column;align-items:center;gap:1px;flex-shrink:0}
+.sd{width:1px;height:28px;background:var(--border)}
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px}
+#lbox{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:340px;width:100%}
+#lbox h2{font-size:15px;color:var(--accent);margin-bottom:6px}
+#lbox p{font-size:12px;color:var(--muted);margin-bottom:18px;line-height:1.5}
+.field{margin-bottom:12px}
+.field label{font-size:10px;color:var(--muted);letter-spacing:.08em;display:block;margin-bottom:4px}
+.field input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:6px;font-family:inherit;font-size:13px}
+.field input:focus{outline:none;border-color:var(--accent)}
+#lbtn{width:100%;background:var(--accent);color:#000;border:none;padding:11px;border-radius:6px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer}
+#lbtn:disabled{opacity:.5;cursor:default}
+#lerr{font-size:11px;color:var(--red);margin-top:8px;display:none;text-align:center}
+#demo-lnk{display:block;text-align:center;margin-top:12px;font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline}
+#loading{position:fixed;inset:0;background:rgba(13,15,20,.82);display:none;align-items:center;justify-content:center;z-index:8000;flex-direction:column;gap:10px}
+#loading.show{display:flex}
+.spin{width:30px;height:30px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading p{font-size:11px;color:var(--muted)}
+#toast{position:fixed;bottom:72px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--border);color:var(--text);padding:7px 14px;border-radius:20px;font-size:11px;z-index:7000;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+#toast.show{opacity:1}
+.leaflet-popup-content-wrapper{background:var(--panel)!important;border:1px solid var(--border)!important;border-radius:8px!important;color:var(--text)!important}
+.leaflet-popup-tip{background:var(--panel)!important}
+.leaflet-popup-content{margin:11px 13px!important;font-family:'Courier New',monospace}
+.pt{font-size:12px;font-weight:700;margin-bottom:5px}
+.pr{font-size:11px;color:var(--muted);margin-bottom:3px}
+.pr span{color:var(--text)}
+.ok{color:var(--green)}.warn{color:var(--yellow)}.bad{color:var(--red)}
+</style>
+</head>
+<body>
+<div id="overlay">
+  <div id="lbox">
+    <h2>Metrobús RT</h2>
+    <p>Ingresa tus credenciales de SinOptico.</p>
+    <div class="field"><label>USUARIO</label><input id="iu" type="text" autocomplete="username" spellcheck="false" value="aexis19"/></div>
+    <div class="field"><label>SENHA</label><input id="ip" type="password" autocomplete="current-password"/></div>
+    <button id="lbtn">Conectar</button>
+    <div id="lerr"></div>
+    <span id="demo-lnk">Modo demo (datos simulados)</span>
+  </div>
+</div>
+<div id="loading"><div class="spin"></div><p id="ltxt">Cargando...</p></div>
+<div id="topbar">
+  <h1>METROBÚS RT</h1>
+  <div id="dot"></div>
+  <div id="status">Sin conexión</div>
+  <button id="refresh-btn">↻</button>
+</div>
+<div id="filters">
+  <span class="fl">LÍNEA</span>
+  <button class="ba on" id="btn-all">Todas</button>
+  <button class="lb on" data-l="1" style="background:#42A76B;color:#fff">L1</button>
+  <button class="lb on" data-l="2" style="background:#42A76B;color:#fff">L2</button>
+  <button class="lb on" data-l="3" style="background:#7A9A01;color:#fff">L3</button>
+  <button class="lb on" data-l="4" style="background:#FF9A03;color:#000">L4</button>
+  <button class="lb on" data-l="5" style="background:#141982;color:#fff">L5</button>
+  <button class="lb on" data-l="6" style="background:#E44599;color:#fff">L6</button>
+  <button class="lb on" data-l="7" style="background:#116633;color:#fff">L7</button>
+</div>
+<div id="map"></div>
+<div id="stats">
+  <div class="ss"><div class="sv" id="s0" style="color:var(--accent)">—</div><div class="sl">UNIDADES</div></div>
+  <div class="sd"></div>
+  <div class="ss"><div class="sv ok" id="s1">—</div><div class="sl">EN TIEMPO</div></div>
+  <div class="ss"><div class="sv warn" id="s2">—</div><div class="sl">&lt;5 MIN</div></div>
+  <div class="ss"><div class="sv bad" id="s3">—</div><div class="sl">&gt;5 MIN</div></div>
+  <div class="sd"></div>
+  <div class="ss"><div class="sv" id="s4" style="color:var(--muted);font-size:10px">—</div><div class="sl">ACTUALIZ.</div></div>
+</div>
+<div id="toast"></div>
+<script>
+const STOPS_DATA=[{"id": "fa077f", "name": "Potrero", "lat": 19.476608, "lon": -99.132652, "lines": ["1"]}, {"id": "fa0781", "name": "Circuito L1", "lat": 19.462622, "lon": -99.143867, "lines": ["1"]}, {"id": "fa0782", "name": "San Simón", "lat": 19.459519, "lon": -99.146438, "lines": ["1"]}, {"id": "fa0783", "name": "Manuel González", "lat": 19.45672, "lon": -99.149467, "lines": ["1"]}, {"id": "fa0784", "name": "Buenavista L1", "lat": 19.446883, "lon": -99.153168, "lines": ["1"]}, {"id": "fa0785", "name": "El Chopo", "lat": 19.443255, "lon": -99.154474, "lines": ["1"]}, {"id": "fa0786", "name": "Revolución", "lat": 19.440232, "lon": -99.155515, "lines": ["1"]}, {"id": "fa0787", "name": "Plaza de la República L1", "lat": 19.435971, "lon": -99.15739, "lines": ["1"]}, {"id": "fa0788", "name": "Reforma L1", "lat": 19.432799, "lon": -99.158793, "lines": ["1"]}, {"id": "fa0789", "name": "Hamburgo L1", "lat": 19.427708, "lon": -99.161195, "lines": ["1"]}, {"id": "fa078a", "name": "Insurgentes", "lat": 19.424109, "lon": -99.163331, "lines": ["1"]}, {"id": "fa078b", "name": "Insurgentes.", "lat": 19.423372, "lon": -99.162482, "lines": ["1"]}, {"id": "fa078c", "name": "Durango", "lat": 19.420064, "lon": -99.164052, "lines": ["1"]}, {"id": "fa078d", "name": "Álvaro Obregón", "lat": 19.416534, "lon": -99.165091, "lines": ["1"]}, {"id": "fa078e", "name": "Sonora", "lat": 19.413411, "lon": -99.166104, "lines": ["1"]}, {"id": "fa078f", "name": "Campeche", "lat": 19.409779, "lon": -99.167273, "lines": ["1"]}, {"id": "fa0790", "name": "Chilpancingo", "lat": 19.406681, "lon": -99.168237, "lines": ["1"]}, {"id": "fa0791", "name": "El Caminero", "lat": 19.278957, "lon": -99.169404, "lines": ["1"]}, {"id": "fa0792", "name": "Nuevo León L1", "lat": 19.402043, "lon": -99.169752, "lines": ["1", "2"]}, {"id": "fa0793", "name": "La Joya", "lat": 19.280355, "lon": -99.170011, "lines": ["1"]}, {"id": "fa0794", "name": "La Piedad", "lat": 19.397764, "lon": -99.171154, "lines": ["1", "2"]}, {"id": "fa0795", "name": "Polifórum", "lat": 19.393214, "lon": -99.172701, "lines": ["1", "2"]}, {"id": "fa0796", "name": "Nápoles", "lat": 19.389622, "lon": -99.173799, "lines": ["1", "2"]}, {"id": "fa0797", "name": "Fuentes Brotantes", "lat": 19.288059, "lon": -99.174598, "lines": ["1"]}, {"id": "fa0798", "name": "Colonia del Valle", "lat": 19.385714, "lon": -99.175066, "lines": ["1", "2"]}, {"id": "fa0799", "name": "Santa Úrsula", "lat": 19.283208, "lon": -99.175365, "lines": ["1"]}, {"id": "fa079a", "name": "Ciudad de los Deportes", "lat": 19.38227, "lon": -99.17628, "lines": ["1"]}, {"id": "fa079b", "name": "Parque Hundido", "lat": 19.379468, "lon": -99.177086, "lines": ["1"]}, {"id": "fa079c", "name": "Ayuntamiento", "lat": 19.292645, "lon": -99.177639, "lines": ["1"]}, {"id": "fa079e", "name": "Río Churubusco", "lat": 19.368909, "lon": -99.180511, "lines": ["1"]}, {"id": "fa079f", "name": "Corregidora", "lat": 19.294105, "lon": -99.18111, "lines": ["1"]}, {"id": "fa07a0", "name": "Teatro de los Insurgentes", "lat": 19.364905, "lon": -99.181809, "lines": ["1"]}, {"id": "fa07a1", "name": "José María Velasco", "lat": 19.361762, "lon": -99.182897, "lines": ["1"]}, {"id": "fa07a2", "name": "Francia", "lat": 19.358305, "lon": -99.183951, "lines": ["1"]}, {"id": "fa07a3", "name": "Olivo", "lat": 19.354645, "lon": -99.185136, "lines": ["1"]}, {"id": "fa07a4", "name": "Villa Olímpica", "lat": 19.299148, "lon": -99.185487, "lines": ["1"]}, {"id": "fa07a5", "name": "Perisur", "lat": 19.30406, "lon": -99.18624, "lines": ["1"]}, {"id": "fa07a6", "name": "Altavista", "lat": 19.350772, "lon": -99.186382, "lines": ["1"]}, {"id": "fa07a7", "name": "CCU", "lat": 19.31514, "lon": -99.187537, "lines": ["1"]}, {"id": "fa07a8", "name": "La Bombilla", "lat": 19.346895, "lon": -99.187766, "lines": ["1"]}, {"id": "fa07aa", "name": "Dep. 18 Mzo. L1", "lat": 19.486449, "lon": -99.124518, "lines": ["1"]}, {"id": "fa07ab", "name": "Euzkaro", "lat": 19.482662, "lon": -99.127624, "lines": ["1"]}, {"id": "fa07ac", "name": "Ciudad Universitaria", "lat": 19.32291, "lon": -99.188535, "lines": ["1"]}, {"id": "f85743", "name": "Hamburgo L7", "lat": 19.429954, "lon": -99.161596, "lines": ["2", "7"]}, {"id": "f85744", "name": "Canal Apatlaco", "lat": 19.382832, "lon": -99.11096, "lines": ["5"]}, {"id": "f85745", "name": "El Salvador.", "lat": 19.430077, "lon": -99.139541, "lines": ["4"]}, {"id": "f85746", "name": "Antropología", "lat": 19.424715, "lon": -99.184334, "lines": ["7"]}, {"id": "f85747", "name": "Hospital General Troncoso", "lat": 19.405711, "lon": -99.113573, "lines": ["5"]}, {"id": "f85748", "name": "Mercado Beethoven.", "lat": 19.457769, "lon": -99.128945, "lines": ["7"]}, {"id": "f85749", "name": "Gral. Antonio de León", "lat": 19.385381, "lon": -99.05174, "lines": ["2"]}, {"id": "f8574a", "name": "La Villa", "lat": 19.485387, "lon": -99.119619, "lines": ["6"]}, {"id": "f8574b", "name": "Alcaldía Cuauhtémoc.", "lat": 19.44225, "lon": -99.152457, "lines": ["4"]}, {"id": "f8574c", "name": "Río Tecolutla", "lat": 19.388989, "lon": -99.083109, "lines": ["1", "2"]}, {"id": "f8574d", "name": "Clave.", "lat": 19.464527, "lon": -99.126366, "lines": ["7"]}, {"id": "f8574f", "name": "Churubusco Oriente", "lat": 19.371823, "lon": -99.107956, "lines": ["5"]}, {"id": "f85751", "name": "Chapultepec", "lat": 19.424047, "lon": -99.174225, "lines": ["2", "7"]}, {"id": "f85752", "name": "Mixihuca", "lat": 19.408104, "lon": -99.113245, "lines": ["5"]}, {"id": "f85753", "name": "Héroe de Nacozari", "lat": 19.47122, "lon": -99.145056, "lines": ["3"]}, {"id": "f85754", "name": "Reforma L7", "lat": 19.431395, "lon": -99.158788, "lines": ["2", "7"]}, {"id": "f85755", "name": "Circuito Cuemanco", "lat": 19.281266, "lon": -99.116724, "lines": ["5"]}, {"id": "f85756", "name": "Museo San Carlos.", "lat": 19.438168, "lon": -99.150307, "lines": ["4"]}, {"id": "f85757", "name": "Ampliación Providencia", "lat": 19.479806, "lon": -99.075257, "lines": ["6"]}, {"id": "f85758", "name": "La Viga", "lat": 19.398034, "lon": -99.124572, "lines": ["1", "2"]}, {"id": "f8575a", "name": "Talismán L5", "lat": 19.471045, "lon": -99.101456, "lines": ["5"]}, {"id": "f8575b", "name": "Tres Culturas.", "lat": 19.450419, "lon": -99.132782, "lines": ["7"]}, {"id": "f8575c", "name": "Viaducto", "lat": 19.401354, "lon": -99.168144, "lines": ["1", "2"]}, {"id": "f8575d", "name": "Moctezuma L4", "lat": 19.426887, "lon": -99.112015, "lines": ["4"]}, {"id": "f8575e", "name": "Glorieta de Violeta", "lat": 19.441538, "lon": -99.142237, "lines": ["2", "7"]}, {"id": "f8575f", "name": "Colegio de Bachilleres 1", "lat": 19.511559, "lon": -99.197296, "lines": ["6"]}, {"id": "f85760", "name": "San Lázaro Sur L5", "lat": 19.430378, "lon": -99.115331, "lines": ["5"]}, {"id": "f85762", "name": "Leyes de Reforma", "lat": 19.38343, "lon": -99.0658, "lines": ["2"]}, {"id": "f85763", "name": "Ferrocarril de Cintura", "lat": 19.436091, "lon": -99.121466, "lines": ["4"]}, {"id": "f85765", "name": "Vasco de Quiroga", "lat": 19.493356, "lon": -99.092005, "lines": ["5"]}, {"id": "f85766", "name": "Las Cruces", "lat": 19.426108, "lon": -99.12969, "lines": ["4"]}, {"id": "f85768", "name": "Las Bombas", "lat": 19.311752, "lon": -99.110717, "lines": ["5"]}, {"id": "f85769", "name": "Garibaldi.", "lat": 19.443735, "lon": -99.139158, "lines": ["2", "7"]}, {"id": "f8576a", "name": "Antropología.", "lat": 19.42461, "lon": -99.185522, "lines": ["7"]}, {"id": "f8576b", "name": "La Virgen", "lat": 19.320563, "lon": -99.113516, "lines": ["5"]}, {"id": "f8576d", "name": "Alameda Ote", "lat": 19.430769, "lon": -99.053298, "lines": ["4"]}, {"id": "f8576e", "name": "Garrido", "lat": 19.483344, "lon": -99.11931, "lines": ["7"]}, {"id": "f8576f", "name": "Poniente 134", "lat": 19.492544, "lon": -99.153218, "lines": ["3"]}, {"id": "f85770", "name": "Terminal 1 AICM", "lat": 19.435492, "lon": -99.083285, "lines": ["4"]}, {"id": "f85771", "name": "Teatro del Pueblo.", "lat": 19.436843, "lon": -99.127215, "lines": ["4"]}, {"id": "f85772", "name": "Norte 45", "lat": 19.496438, "lon": -99.159911, "lines": ["6"]}, {"id": "f85773", "name": "Aculco", "lat": 19.374875, "lon": -99.108161, "lines": ["5"]}, {"id": "f85774", "name": "República de Chile", "lat": 19.437941, "lon": -99.135569, "lines": ["4"]}, {"id": "f85775", "name": "Chapultepec.", "lat": 19.423762, "lon": -99.174336, "lines": ["2", "7"]}, {"id": "f85776", "name": "Gustavo A. Madero L6", "lat": 19.48381, "lon": -99.112212, "lines": ["6"]}, {"id": "f85778", "name": "Hospital General La Villa", "lat": 19.480285, "lon": -99.101188, "lines": ["6"]}, {"id": "f85779", "name": "Coyuya", "lat": 19.398254, "lon": -99.116708, "lines": ["1", "2"]}, {"id": "f8577a", "name": "Vocacional 5", "lat": 19.431588, "lon": -99.150163, "lines": ["4"]}, {"id": "f8577b", "name": "482.", "lat": 19.46688, "lon": -99.07562, "lines": ["6"]}, {"id": "f8577c", "name": "Mixcalco", "lat": 19.436423, "lon": -99.124132, "lines": ["4"]}, {"id": "f8577d", "name": "Etiopía L2", "lat": 19.395804, "lon": -99.154843, "lines": ["1", "2"]}, {"id": "f8577e", "name": "Archivo General de la Nación L4.", "lat": 19.435449, "lon": -99.11504, "lines": ["4"]}, {"id": "f8577f", "name": "Pino Suárez", "lat": 19.426493, "lon": -99.132653, "lines": ["4"]}, {"id": "f85780", "name": "El Ángel", "lat": 19.426629, "lon": -99.168652, "lines": ["2", "7"]}, {"id": "f85781", "name": "Deportivo Eduardo Molina", "lat": 19.444739, "lon": -99.1122, "lines": ["5"]}, {"id": "f85782", "name": "Álamos", "lat": 19.394724, "lon": -99.142928, "lines": ["1", "2"]}, {"id": "f85783", "name": "Campo Marte", "lat": 19.427038, "lon": -99.199422, "lines": ["7"]}, {"id": "f85784", "name": "Peralvillo", "lat": 19.453742, "lon": -99.130629, "lines": ["7"]}, {"id": "f85785", "name": "El Caballito", "lat": 19.435988, "lon": -99.149117, "lines": ["2", "7"]}, {"id": "f85786", "name": "La Pradera", "lat": 19.473092, "lon": -99.06869, "lines": ["6"]}, {"id": "f85787", "name": "Necaxa", "lat": 19.475583, "lon": -99.122228, "lines": ["7"]}, {"id": "f85788", "name": "Plaza de la República L4", "lat": 19.436783, "lon": -99.154151, "lines": ["4"]}, {"id": "f85789", "name": "Gran Canal", "lat": 19.476993, "lon": -99.092799, "lines": ["6"]}, {"id": "f8578a", "name": "Hidalgo L7.", "lat": 19.43666, "lon": -99.147552, "lines": ["2", "7"]}, {"id": "f8578b", "name": "Hamburgo L7.", "lat": 19.429237, "lon": -99.162694, "lines": ["2", "7"]}, {"id": "f8578c", "name": "Ganaderos", "lat": 19.350577, "lon": -99.111068, "lines": ["5"]}, {"id": "f8578d", "name": "Teatro Blanquita.", "lat": 19.438661, "lon": -99.140109, "lines": ["4"]}, {"id": "f8578e", "name": "Antonio Maceo.", "lat": 19.404867, "lon": -99.185856, "lines": ["2"]}, {"id": "f8578f", "name": "Hospital Infantil La Villa L7", "lat": 19.487252, "lon": -99.113795, "lines": ["7"]}, {"id": "f85790", "name": "Reforma L7.", "lat": 19.431134, "lon": -99.158548, "lines": ["2", "7"]}, {"id": "f85791", "name": "Canal de San Juan.", "lat": 19.396709, "lon": -99.056532, "lines": ["2"]}, {"id": "f85792", "name": "Garrido.", "lat": 19.483366, "lon": -99.119272, "lines": ["7"]}, {"id": "f85793", "name": "Glorieta de Colón L7", "lat": 19.433403, "lon": -99.154322, "lines": ["2"]}, {"id": "f85794", "name": "Río de los Remedios", "lat": 19.507095, "lon": -99.085941, "lines": ["5"]}, {"id": "f85795", "name": "Misterios", "lat": 19.462526, "lon": -99.127156, "lines": ["7"]}, {"id": "f85796", "name": "Victoria", "lat": 19.467458, "lon": -99.102964, "lines": ["5"]}, {"id": "f85797", "name": "Río Consulado", "lat": 19.453607, "lon": -99.108597, "lines": ["5"]}, {"id": "f85798", "name": "Isabel la Católica.", "lat": 19.429675, "lon": -99.13666, "lines": ["4"]}, {"id": "f85799", "name": "Tecnoparque", "lat": 19.502479, "lon": -99.178963, "lines": ["6"]}, {"id": "f8579a", "name": "Recreo", "lat": 19.393796, "lon": -99.113733, "lines": ["5"]}, {"id": "f8579b", "name": "Instituto del Petróleo", "lat": 19.49312, "lon": -99.14518, "lines": ["6"]}, {"id": "f8579c", "name": "San Lázaro Norte L5", "lat": 19.431216, "lon": -99.115152, "lines": ["5"]}, {"id": "f8579d", "name": "De los Misterios L6", "lat": 19.487095, "lon": -99.117986, "lines": ["6"]}, {"id": "f8579f", "name": "Rojo Gómez", "lat": 19.384436, "lon": -99.07628, "lines": ["1", "2"]}, {"id": "f857a0", "name": "Excélsior.", "lat": 19.470871, "lon": -99.123937, "lines": ["7"]}, {"id": "f857a1", "name": "Poniente 146", "lat": 19.500039, "lon": -99.155854, "lines": ["3"]}, {"id": "f857a2", "name": "Peralvillo.", "lat": 19.452724, "lon": -99.131007, "lines": ["7"]}, {"id": "f857a3", "name": "Museo de la Ciudad", "lat": 19.429091, "lon": -99.132742, "lines": ["4"]}, {"id": "f857a4", "name": "El Ángel.", "lat": 19.42646, "lon": -99.168565, "lines": ["2", "7"]}, {"id": "f857a5", "name": "Venustiano Carranza", "lat": 19.418727, "lon": -99.112147, "lines": ["5"]}, {"id": "f857a6", "name": "Mercados de San Juan", "lat": 19.43081, "lon": -99.144853, "lines": ["4"]}, {"id": "f857a7", "name": "Campo Marte.", "lat": 19.426671, "lon": -99.199428, "lines": ["7"]}, {"id": "f857a8", "name": "Juárez L4", "lat": 19.431313, "lon": -99.148298, "lines": ["4"]}, {"id": "f857a9", "name": "Magdalena de las Salinas", "lat": 19.483958, "lon": -99.149988, "lines": ["3"]}, {"id": "f857aa", "name": "Del Moral.", "lat": 19.384192, "lon": -99.07091, "lines": ["2"]}, {"id": "f857ab", "name": "Necaxa.", "lat": 19.475584, "lon": -99.122204, "lines": ["7"]}, {"id": "f857ac", "name": "Plaza de la República L4.", "lat": 19.43774, "lon": -99.153729, "lines": ["4"]}, {"id": "f857ad", "name": "El Coyol", "lat": 19.487654, "lon": -99.094419, "lines": ["5"]}, {"id": "f857b0", "name": "Moctezuma L5", "lat": 19.425764, "lon": -99.11139, "lines": ["5"]}, {"id": "f857b1", "name": "Xola", "lat": 19.39432, "lon": -99.14017, "lines": ["1", "2"]}, {"id": "f857b2", "name": "Tacubaya", "lat": 19.401936, "lon": -99.187022, "lines": ["2"]}, {"id": "f857b3", "name": "Gustavo A. Madero L7.", "lat": 19.483653, "lon": -99.113878, "lines": ["7"]}, {"id": "f857b4", "name": "Tlacotal", "lat": 19.3972, "lon": -99.103948, "lines": ["1", "2"]}, {"id": "f857b5", "name": "Calle 6", "lat": 19.421115, "lon": -99.058232, "lines": ["4"]}, {"id": "f857b6", "name": "Cecilio Robelo", "lat": 19.425438, "lon": -99.119802, "lines": ["4"]}, {"id": "f857b7", "name": "México Tenochtitlan", "lat": 19.438901, "lon": -99.153285, "lines": ["4"]}, {"id": "f857b8", "name": "Pueblo de San Juan de Aragón", "lat": 19.471069, "lon": -99.086448, "lines": ["6"]}, {"id": "f857b9", "name": "Teatro del Pueblo", "lat": 19.436906, "lon": -99.128043, "lines": ["4"]}, {"id": "f857ba", "name": "Muyuguarda", "lat": 19.285006, "lon": -99.115552, "lines": ["5"]}, {"id": "f857bb", "name": "Escuadrón 201", "lat": 19.366043, "lon": -99.109203, "lines": ["5"]}, {"id": "f857bc", "name": "Isabel la Católica", "lat": 19.429693, "lon": -99.136972, "lines": ["4"]}, {"id": "f857bd", "name": "Patriotismo", "lat": 19.405482, "lon": -99.177268, "lines": ["2"]}, {"id": "f857be", "name": "Metro Coyuya L2", "lat": 19.398335, "lon": -99.113125, "lines": ["1", "2"]}, {"id": "f857c0", "name": "República de Argentina.", "lat": 19.437414, "lon": -99.131489, "lines": ["4"]}, {"id": "f857c1", "name": "De los Misterios L7", "lat": 19.487148, "lon": -99.117907, "lines": ["7"]}, {"id": "f857c2", "name": "Doctor Vértiz", "lat": 19.395583, "lon": -99.151691, "lines": ["1", "2"]}, {"id": "f857c3", "name": "Terminal 2 AICM", "lat": 19.420876, "lon": -99.078344, "lines": ["4"]}, {"id": "f857c4", "name": "Robles Domínguez", "lat": 19.468559, "lon": -99.125076, "lines": ["7"]}, {"id": "f857c5", "name": "París", "lat": 19.432566, "lon": -99.15611, "lines": ["2", "7"]}, {"id": "f857c7", "name": "Instituto Politécnico Nacional", "lat": 19.4904, "lon": -99.132707, "lines": ["6"]}, {"id": "f857c8", "name": "Nuevo León L2", "lat": 19.403537, "lon": -99.170581, "lines": ["2"]}, {"id": "f857c9", "name": "Barrio San Antonio", "lat": 19.343062, "lon": -99.11244, "lines": ["5"]}, {"id": "f857cb", "name": "El Rosario", "lat": 19.507206, "lon": -99.199537, "lines": ["6"]}, {"id": "f857cc", "name": "Júpiter", "lat": 19.508691, "lon": -99.159214, "lines": ["3"]}, {"id": "f857cd", "name": "Lindavista - Vallejo", "lat": 19.49384, "lon": -99.148147, "lines": ["6"]}, {"id": "f857ce", "name": "416 Oriente.", "lat": 19.471061, "lon": -99.070929, "lines": ["6"]}, {"id": "f857cf", "name": "Dep. 18 Mzo. L6", "lat": 19.486493, "lon": -99.122284, "lines": ["6"]}, {"id": "f857d1", "name": "Preparatoria 3", "lat": 19.4834, "lon": -99.096314, "lines": ["5"]}, {"id": "f857d2", "name": "Oriente 101", "lat": 19.460897, "lon": -99.105719, "lines": ["5"]}, {"id": "f857d3", "name": "Amores", "lat": 19.396836, "lon": -99.163711, "lines": ["1", "2"]}, {"id": "f857d4", "name": "Ermita-Iztapalapa", "lat": 19.356695, "lon": -99.111284, "lines": ["5"]}, {"id": "f857d5", "name": "Eje Central.", "lat": 19.430261, "lon": -99.140805, "lines": ["4"]}, {"id": "f857d6", "name": "Parque Lira", "lat": 19.407793, "lon": -99.189119, "lines": ["2"]}, {"id": "f857d7", "name": "Manuela Sáenz", "lat": 19.32422, "lon": -99.113975, "lines": ["5"]}, {"id": "f857d8", "name": "San Lázaro L4 Pte", "lat": 19.430493, "lon": -99.115503, "lines": ["4"]}, {"id": "f857d9", "name": "Villa de Aragón", "lat": 19.464956, "lon": -99.059604, "lines": ["6"]}, {"id": "f857da", "name": "Preparatoria 1", "lat": 19.273471, "lon": -99.120546, "lines": ["5"]}, {"id": "f857dc", "name": "El Rodeo", "lat": 19.39164, "lon": -99.087101, "lines": ["1", "2"]}, {"id": "f857dd", "name": "Misterios.", "lat": 19.460988, "lon": -99.127704, "lines": ["7"]}, {"id": "f857de", "name": "República de Argentina", "lat": 19.437399, "lon": -99.131642, "lines": ["4"]}, {"id": "f857df", "name": "Canela", "lat": 19.397826, "lon": -99.109438, "lines": ["1", "2"]}, {"id": "f857e0", "name": "El Salvador", "lat": 19.429912, "lon": -99.138568, "lines": ["4"]}, {"id": "f857e1", "name": "Gandhi", "lat": 19.424074, "lon": -99.180095, "lines": ["7"]}, {"id": "f857e2", "name": "Metro Coyuya L5", "lat": 19.399559, "lon": -99.113652, "lines": ["5"]}, {"id": "f857e3", "name": "Cuitláhuac", "lat": 19.473954, "lon": -99.146204, "lines": ["3"]}, {"id": "f857e4", "name": "Coltongo", "lat": 19.479881, "lon": -99.148433, "lines": ["3"]}, {"id": "f857e5", "name": "DIF Xochimilco", "lat": 19.276941, "lon": -99.118419, "lines": ["5"]}, {"id": "f857e6", "name": "Poniente 128", "lat": 19.489452, "lon": -99.152035, "lines": ["3"]}, {"id": "f857e7", "name": "Deportivo los Galeana", "lat": 19.478625, "lon": -99.07799, "lines": ["6"]}, {"id": "f857ed", "name": "Oriente 116", "lat": 19.390161, "lon": -99.112748, "lines": ["5"]}, {"id": "f857ee", "name": "Glorieta de Violeta.", "lat": 19.439678, "lon": -99.143934, "lines": ["2", "7"]}, {"id": "f857ef", "name": "Iztacalco", "lat": 19.396518, "lon": -99.09594, "lines": ["1", "2"]}, {"id": "f857f0", "name": "Vocacional 5.", "lat": 19.431724, "lon": -99.150834, "lines": ["4"]}, {"id": "f857f1", "name": "414.", "lat": 19.468362, "lon": -99.071615, "lines": ["6"]}, {"id": "f857f2", "name": "Mercado Sonora", "lat": 19.423189, "lon": -99.123424, "lines": ["4"]}, {"id": "f857f3", "name": "Montevideo L3", "lat": 19.496156, "lon": -99.154416, "lines": ["3"]}, {"id": "f857f4", "name": "Hospital Infantil La Villa L6", "lat": 19.488055, "lon": -99.114753, "lines": ["6"]}, {"id": "f857f6", "name": "Pueblo de los Reyes", "lat": 19.348046, "lon": -99.111325, "lines": ["5"]}, {"id": "f857f8", "name": "Ferrocarriles Nacionales", "lat": 19.504879, "lon": -99.188793, "lines": ["6"]}, {"id": "f857f9", "name": "Riobamba", "lat": 19.488632, "lon": -99.127933, "lines": ["6"]}, {"id": "f857fa", "name": "Const. de Apatzingán", "lat": 19.389034, "lon": -99.059811, "lines": ["2"]}, {"id": "f857fb", "name": "Indios Verdes L7", "lat": 19.493247, "lon": -99.120978, "lines": ["7"]}, {"id": "f857fc", "name": "México Tenochtitlan.", "lat": 19.439671, "lon": -99.152995, "lines": ["4"]}, {"id": "f857fd", "name": "Casas Alemán", "lat": 19.47422, "lon": -99.088345, "lines": ["6"]}, {"id": "f857fe", "name": "Hidalgo L4.", "lat": 19.437331, "lon": -99.146177, "lines": ["4"]}, {"id": "f857ff", "name": "Apatlaco", "lat": 19.378029, "lon": -99.109168, "lines": ["5"]}, {"id": "f85800", "name": "Garibaldi", "lat": 19.444237, "lon": -99.13962, "lines": ["2", "7"]}, {"id": "f85801", "name": "Gandhi.", "lat": 19.423933, "lon": -99.180728, "lines": ["7"]}, {"id": "f85802", "name": "Mercado Morelos", "lat": 19.441197, "lon": -99.11353, "lines": ["5"]}, {"id": "f85803", "name": "París.", "lat": 19.432496, "lon": -99.155781, "lines": ["2", "7"]}, {"id": "f85804", "name": "Morelos.", "lat": 19.43582, "lon": -99.118456, "lines": ["4"]}, {"id": "f85805", "name": "Buenavista L3 Sur", "lat": 19.445758, "lon": -99.152142, "lines": ["1", "3"]}, {"id": "f85806", "name": "416 Poniente", "lat": 19.472471, "lon": -99.079403, "lines": ["6"]}, {"id": "f85807", "name": "Robles Domínguez.", "lat": 19.467015, "lon": -99.125432, "lines": ["7"]}, {"id": "f85808", "name": "San Juan de Aragón L5", "lat": 19.480015, "lon": -99.097739, "lines": ["5"]}, {"id": "f85809", "name": "Las Américas", "lat": 19.393419, "lon": -99.134277, "lines": ["1", "2"]}, {"id": "f8580a", "name": "La Diana", "lat": 19.425589, "lon": -99.170964, "lines": ["2", "7"]}, {"id": "f8580b", "name": "Avenida del Taller", "lat": 19.412591, "lon": -99.112791, "lines": ["5"]}, {"id": "f8580d", "name": "Archivo General de la Nación L5", "lat": 19.437044, "lon": -99.114475, "lines": ["5"]}, {"id": "f8580e", "name": "El Caballito.", "lat": 19.435104, "lon": -99.150239, "lines": ["2", "7"]}, {"id": "f8580f", "name": "Volcán de Fuego", "lat": 19.477075, "lon": -99.072622, "lines": ["6"]}, {"id": "f85810", "name": "Mixcalco.", "lat": 19.436389, "lon": -99.123643, "lines": ["4"]}, {"id": "f85812", "name": "Andrés Molina Enríquez", "lat": 19.397631, "lon": -99.129708, "lines": ["1", "2"]}, {"id": "f85813", "name": "Norte 59", "lat": 19.497612, "lon": -99.165632, "lines": ["6"]}, {"id": "f85814", "name": "Colegio de Bachilleres 3", "lat": 19.386336, "lon": -99.111762, "lines": ["5"]}, {"id": "f85815", "name": "Bellas Artes", "lat": 19.436383, "lon": -99.141558, "lines": ["4"]}, {"id": "f85816", "name": "De Las Culturas", "lat": 19.510877, "lon": -99.19268, "lines": ["6"]}, {"id": "f85817", "name": "Hidalgo L4", "lat": 19.43726, "lon": -99.145871, "lines": ["4"]}, {"id": "f85818", "name": "CCH Oriente", "lat": 19.383331, "lon": -99.060748, "lines": ["2"]}, {"id": "f85819", "name": "Ferrocarril de Cintura.", "lat": 19.436095, "lon": -99.121017, "lines": ["4"]}, {"id": "f8581b", "name": "314 Memorial New's Divine", "lat": 19.500519, "lon": -99.089057, "lines": ["5"]}, {"id": "f8581d", "name": "Atanasio G. Sarabia", "lat": 19.361214, "lon": -99.11034, "lines": ["5"]}, {"id": "f8581e", "name": "San Bartolo", "lat": 19.491938, "lon": -99.139115, "lines": ["6"]}, {"id": "f8581f", "name": "UAM Azcapotzalco", "lat": 19.503961, "lon": -99.183858, "lines": ["6"]}, {"id": "f85820", "name": "ESIME Culhuacán", "lat": 19.329185, "lon": -99.113543, "lines": ["5"]}, {"id": "f85821", "name": "San Juan de Aragón L6", "lat": 19.478695, "lon": -99.097219, "lines": ["6"]}, {"id": "f85822", "name": "Tepalcates", "lat": 19.390815, "lon": -99.047495, "lines": ["1", "2"]}, {"id": "f85823", "name": "Morelos", "lat": 19.435822, "lon": -99.118832, "lines": ["4"]}, {"id": "f85824", "name": "Buenavista L4", "lat": 19.445414, "lon": -99.15167, "lines": ["4"]}, {"id": "f85825", "name": "Río Mayo", "lat": 19.386895, "lon": -99.079974, "lines": ["1", "2"]}, {"id": "f85826", "name": "La Merced", "lat": 19.425517, "lon": -99.125829, "lines": ["4"]}, {"id": "f85827", "name": "Cañaverales", "lat": 19.295664, "lon": -99.114479, "lines": ["5"]}, {"id": "f85828", "name": "Martín Carrera", "lat": 19.481992, "lon": -99.10538, "lines": ["6"]}, {"id": "f85829", "name": "República de Chile.", "lat": 19.437949, "lon": -99.135319, "lines": ["4"]}, {"id": "f8582a", "name": "La Diana.", "lat": 19.42467, "lon": -99.172428, "lines": ["2", "7"]}, {"id": "f8582b", "name": "Calzada Taxqueña", "lat": 19.338655, "lon": -99.112933, "lines": ["5"]}, {"id": "f8582d", "name": "Mercado Beethoven", "lat": 19.457609, "lon": -99.129044, "lines": ["7"]}, {"id": "f8582e", "name": "Hospital Balbuena.", "lat": 19.424956, "lon": -99.114758, "lines": ["4"]}, {"id": "f8582f", "name": "Museo San Carlos", "lat": 19.438021, "lon": -99.149815, "lines": ["4"]}, {"id": "f85830", "name": "Pantitlán", "lat": 19.416971, "lon": -99.073421, "lines": ["4"]}, {"id": "f85831", "name": "Excélsior", "lat": 19.472163, "lon": -99.123487, "lines": ["7"]}, {"id": "f85833", "name": "Hidalgo L7", "lat": 19.437729, "lon": -99.146438, "lines": ["2", "7"]}, {"id": "f85836", "name": "Tepetlapa", "lat": 19.316188, "lon": -99.11163, "lines": ["5"]}, {"id": "f85837", "name": "Bellas Artes.", "lat": 19.436344, "lon": -99.141762, "lines": ["4"]}, {"id": "f85838", "name": "Auditorio", "lat": 19.426303, "lon": -99.194682, "lines": ["7"]}, {"id": "f85839", "name": "La Patera", "lat": 19.503711, "lon": -99.157221, "lines": ["3"]}, {"id": "f8583a", "name": "Juárez L4.", "lat": 19.431281, "lon": -99.147832, "lines": ["4"]}, {"id": "f8583b", "name": "Francisco Morazán", "lat": 19.466976, "lon": -99.06181, "lines": ["6"]}, {"id": "f8583c", "name": "Av. Talismán", "lat": 19.479081, "lon": -99.120926, "lines": ["7"]}, {"id": "f8583d", "name": "Glorieta de Colón L7.", "lat": 19.433975, "lon": -99.152668, "lines": ["2"]}, {"id": "f8583e", "name": "5 de Mayo", "lat": 19.497146, "lon": -99.090433, "lines": ["5"]}, {"id": "f8583f", "name": "Río de Guadalupe", "lat": 19.476079, "lon": -99.09932, "lines": ["5"]}, {"id": "f85841", "name": "Canal del Norte", "lat": 19.449552, "lon": -99.110439, "lines": ["5"]}, {"id": "f85842", "name": "Teatro Blanquita", "lat": 19.438448, "lon": -99.139019, "lines": ["4"]}, {"id": "f85843", "name": "De la Salle", "lat": 19.407667, "lon": -99.183564, "lines": ["2"]}, {"id": "f85844", "name": "Calzada del Hueso", "lat": 19.301367, "lon": -99.113476, "lines": ["5"]}, {"id": "f85845", "name": "Archivo General de la Nación L4", "lat": 19.435464, "lon": -99.115496, "lines": ["4"]}, {"id": "f85846", "name": "Nicolás Bravo.", "lat": 19.393503, "lon": -99.050926, "lines": ["2"]}, {"id": "f85847", "name": "Cecilio Robelo.", "lat": 19.42555, "lon": -99.119643, "lines": ["4"]}, {"id": "f85848", "name": "Alcaldía Cuauhtémoc", "lat": 19.442851, "lon": -99.152426, "lines": ["4"]}, {"id": "f85849", "name": "Loreto Fabela", "lat": 19.467298, "lon": -99.080934, "lines": ["6"]}, {"id": "f8584a", "name": "Clave", "lat": 19.46488, "lon": -99.126264, "lines": ["7"]}, {"id": "f8584c", "name": "Río Santa Coleta", "lat": 19.456102, "lon": -99.10758, "lines": ["5"]}, {"id": "f8584e", "name": "Escandón", "lat": 19.404509, "lon": -99.173932, "lines": ["2"]}, {"id": "f8584f", "name": "Cafetales", "lat": 19.33394, "lon": -99.113085, "lines": ["5"]}, {"id": "f85850", "name": "Mercados de San Juan.", "lat": 19.430856, "lon": -99.14494, "lines": ["4"]}, {"id": "f85851", "name": "Centro SCOP", "lat": 19.395273, "lon": -99.146698, "lines": ["1", "2"]}, {"id": "f85852", "name": "Eduardo Molina", "lat": 19.427088, "lon": -99.115276, "lines": ["4"]}, {"id": "f85853", "name": "Defensoría Pública", "lat": 19.43334, "lon": -99.150708, "lines": ["4"]}, {"id": "f85854", "name": "Río Frío", "lat": 19.387627, "lon": -99.074272, "lines": ["2"]}, {"id": "f85855", "name": "Mercado Sonora Sur.", "lat": 19.423049, "lon": -99.126476, "lines": ["4"]}, {"id": "f85858", "name": "Tres Culturas", "lat": 19.450882, "lon": -99.132778, "lines": ["7"]}, {"id": "f8585a", "name": "Vista Hermosa", "lat": 19.306567, "lon": -99.111899, "lines": ["5"]}, {"id": "f8585b", "name": "Eje Central", "lat": 19.430402, "lon": -99.141993, "lines": ["4"]}, {"id": "f8585c", "name": "Auditorio.", "lat": 19.42587, "lon": -99.193768, "lines": ["7"]}, {"id": "f8585d", "name": "Goma", "lat": 19.396861, "lon": -99.100061, "lines": ["1", "2"]}, {"id": "f8585f", "name": "Colegio de Bachilleres 9", "lat": 19.46977, "lon": -99.064869, "lines": ["6"]}, {"id": "f85860", "name": "Av. Talismán.", "lat": 19.478318, "lon": -99.12111, "lines": ["7"]}, {"id": "f85862", "name": "UPIICSA", "lat": 19.393884, "lon": -99.090373, "lines": ["1", "2"]}, {"id": "f85863", "name": "San Lázaro L4 Ote", "lat": 19.430372, "lon": -99.11514, "lines": ["4"]}, {"id": "697b06", "name": "Hospital la Raza", "lat": 19.46796, "lon": -99.143909, "lines": ["3"]}, {"id": "697b07", "name": "Circuito L3", "lat": 19.463363, "lon": -99.14416, "lines": ["3"]}, {"id": "697b08", "name": "Tolnáhuac", "lat": 19.459812, "lon": -99.144138, "lines": ["3"]}, {"id": "697b09", "name": "Tlatelolco", "lat": 19.455499, "lon": -99.145041, "lines": ["1", "3"]}, {"id": "697b0a", "name": "Ricardo Flores Magón", "lat": 19.45187, "lon": -99.145988, "lines": ["1", "3"]}, {"id": "697b0b", "name": "Guerrero", "lat": 19.446072, "lon": -99.147268, "lines": ["1", "3"]}, {"id": "697b0c", "name": "Buenavista L3 Norte", "lat": 19.446309, "lon": -99.151987, "lines": ["1", "3"]}, {"id": "697b0d", "name": "Mina", "lat": 19.44061, "lon": -99.148499, "lines": ["1", "3"]}, {"id": "697b0e", "name": "Hidalgo L3", "lat": 19.435992, "lon": -99.147269, "lines": ["1", "3"]}, {"id": "697b0f", "name": "Juárez L3", "lat": 19.431616, "lon": -99.147952, "lines": ["1", "3"]}, {"id": "697b10", "name": "Balderas", "lat": 19.428031, "lon": -99.148701, "lines": ["1", "3"]}, {"id": "697b11", "name": "Cuauhtémoc", "lat": 19.424955, "lon": -99.153684, "lines": ["1", "3"]}, {"id": "697b12", "name": "Jardín Pushkin", "lat": 19.420456, "lon": -99.154036, "lines": ["1", "3"]}, {"id": "697b13", "name": "Hospital General", "lat": 19.414437, "lon": -99.154524, "lines": ["1", "3"]}, {"id": "697b14", "name": "Doctor Márquez", "lat": 19.411119, "lon": -99.154781, "lines": ["1", "3"]}, {"id": "697b15", "name": "Centro Médico", "lat": 19.407317, "lon": -99.155066, "lines": ["1", "3"]}, {"id": "697b16", "name": "Obrero Mundial", "lat": 19.401119, "lon": -99.155556, "lines": ["1", "3"]}, {"id": "697b17", "name": "Etiopía L3", "lat": 19.396996, "lon": -99.155853, "lines": ["1", "2", "3"]}, {"id": "697b18", "name": "Luz Saviñón", "lat": 19.391495, "lon": -99.156364, "lines": ["1", "3"]}, {"id": "697b19", "name": "Eugenia", "lat": 19.385803, "lon": -99.157192, "lines": ["1", "3"]}, {"id": "697b1a", "name": "División del Norte L3", "lat": 19.380479, "lon": -99.158818, "lines": ["1", "3"]}, {"id": "697b1b", "name": "Tenayuca", "lat": 19.52858, "lon": -99.170095, "lines": ["3"]}, {"id": "697b1c", "name": "San José de la Escalera", "lat": 19.522846, "lon": -99.165532, "lines": ["3"]}, {"id": "697b1d", "name": "Progreso Nacional", "lat": 19.519731, "lon": -99.163758, "lines": ["3"]}, {"id": "697b1e", "name": "Tres Anegas", "lat": 19.515535, "lon": -99.161938, "lines": ["3"]}, {"id": "697b27", "name": "Miguel Laurent", "lat": 19.374902, "lon": -99.160208, "lines": ["1", "3"]}, {"id": "697b28", "name": "Pueblo Sta. Cruz Atoyac", "lat": 19.371767, "lon": -99.160956, "lines": ["1", "3"]}, {"id": "542ae9", "name": "La Raza L3", "lat": 19.467289, "lon": -99.140939, "lines": ["3"]}, {"id": "bfc9a0", "name": "Montevideo L6", "lat": 19.494861, "lon": -99.153062, "lines": ["6"]}, {"id": "e88c44", "name": "La Raza L1", "lat": 19.468933, "lon": -99.138742, "lines": ["1"]}, {"id": "e88cba", "name": "C.C Universitario", "lat": 19.31514, "lon": -99.187542, "lines": ["1"]}, {"id": "9c45f7", "name": "Buenavista L4.", "lat": 19.44537, "lon": -99.15174, "lines": ["4"]}, {"id": "80cc0b", "name": "Defensoría Pública.", "lat": 19.433185, "lon": -99.150616, "lines": ["4"]}, {"id": "b50ecd", "name": "San Pablo.", "lat": 19.425391, "lon": -99.130731, "lines": ["4"]}, {"id": "80cd40", "name": "Pino Suárez Sur.", "lat": 19.426099, "lon": -99.134002, "lines": ["4"]}, {"id": "0c8439", "name": "20 de Noviembre.", "lat": 19.429315, "lon": -99.134165, "lines": ["4"]}, {"id": "b51170", "name": "Hidalgo L4 E4", "lat": 19.437394, "lon": -99.147373, "lines": ["4"]}, {"id": "b315cb", "name": "Glorieta Cuitláhuac Nte", "lat": 19.44921, "lon": -99.134097, "lines": ["7"]}, {"id": "b46d55", "name": "Glorieta Cuitláhuac Sur", "lat": 19.447449, "lon": -99.135742, "lines": ["2", "7"]}, {"id": "b315d3", "name": "Glorieta Cuitláhuac Sur.", "lat": 19.447351, "lon": -99.135512, "lines": ["2", "7"]}, {"id": "0359b9", "name": "Amajac L7.", "lat": 19.433979, "lon": -99.15264, "lines": ["7"]}, {"id": "59aee2", "name": "Amajac L7", "lat": 19.433411, "lon": -99.154339, "lines": ["7"]}, {"id": "749a60", "name": "El Ahuehuete", "lat": 19.428427, "lon": -99.164867, "lines": ["2", "7"]}, {"id": "aefdfc", "name": "El Ahuehuete.", "lat": 19.42812, "lon": -99.16506, "lines": ["2", "7"]}, {"id": "605459", "name": "Amajac L4", "lat": 19.433832, "lon": -99.153505, "lines": ["4"]}, {"id": "aefe05", "name": "Amajac L4.", "lat": 19.434286, "lon": -99.153424, "lines": ["4"]}, {"id": "ba0966", "name": "Alameda Tacubaya", "lat": 19.401526, "lon": -99.185885, "lines": ["2"]}, {"id": "0b47bb", "name": "De la Salle L72", "lat": 19.409121, "lon": -99.183484, "lines": ["2"]}, {"id": "f7f029", "name": "De la Salle L72.", "lat": 19.4083, "lon": -99.184212, "lines": ["2"]}, {"id": "05c62a", "name": "Dep. 18 Mzo. L1.", "lat": 19.486238, "lon": -99.124467, "lines": ["1"]}, {"id": "952042", "name": "Euzkaro.", "lat": 19.482496, "lon": -99.127545, "lines": ["1"]}, {"id": "05c635", "name": "Potrero.", "lat": 19.476773, "lon": -99.132166, "lines": ["1"]}, {"id": "078bbb", "name": "314 Memorial New's Divine.", "lat": 19.500539, "lon": -99.088453, "lines": ["5"]}, {"id": "405dd7", "name": "5 de Mayo.", "lat": 19.496981, "lon": -99.089953, "lines": ["5"]}, {"id": "c98cea", "name": "Vasco de Quiroga.", "lat": 19.493217, "lon": -99.091565, "lines": ["5"]}, {"id": "405e23", "name": "El Coyol.", "lat": 19.487467, "lon": -99.093989, "lines": ["5"]}, {"id": "c98cf8", "name": "Preparatoria 3.", "lat": 19.483317, "lon": -99.095816, "lines": ["5"]}, {"id": "25e1ff", "name": "San Juan de Aragón L5.", "lat": 19.479853, "lon": -99.097278, "lines": ["5"]}, {"id": "2db784", "name": "Río de Guadalupe.", "lat": 19.475956, "lon": -99.098938, "lines": ["5"]}, {"id": "c98d0a", "name": "Talismán L5.", "lat": 19.470932, "lon": -99.10114, "lines": ["5"]}, {"id": "25e20b", "name": "Victoria.", "lat": 19.467198, "lon": -99.102689, "lines": ["5"]}, {"id": "405e42", "name": "Oriente 101.", "lat": 19.460826, "lon": -99.105405, "lines": ["5"]}, {"id": "dd52c3", "name": "Río Santa Coleta.", "lat": 19.455996, "lon": -99.107395, "lines": ["5"]}, {"id": "25e216", "name": "Río Consulado.", "lat": 19.453591, "lon": -99.108331, "lines": ["5"]}, {"id": "2db7a4", "name": "Metro Coyuya L5.", "lat": 19.399238, "lon": -99.113441, "lines": ["5"]}, {"id": "405e4f", "name": "Recreo.", "lat": 19.39382, "lon": -99.113559, "lines": ["5"]}, {"id": "40f461", "name": "Oriente 116.", "lat": 19.390235, "lon": -99.112566, "lines": ["5"]}, {"id": "25e227", "name": "Colegio de Bachilleres 3.", "lat": 19.386263, "lon": -99.111577, "lines": ["5"]}, {"id": "2db7b5", "name": "Canal Apatlaco.", "lat": 19.382867, "lon": -99.110834, "lines": ["5"]}, {"id": "40f471", "name": "Apatlaco.", "lat": 19.3783, "lon": -99.109055, "lines": ["5"]}, {"id": "25e233", "name": "Aculco.", "lat": 19.374666, "lon": -99.107807, "lines": ["5"]}, {"id": "2db7c3", "name": "Churubusco Oriente.", "lat": 19.3716, "lon": -99.107738, "lines": ["5"]}, {"id": "40f477", "name": "Ganaderos.", "lat": 19.350588, "lon": -99.110757, "lines": ["5"]}, {"id": "c98d35", "name": "Preparatoria 1.", "lat": 19.273529, "lon": -99.120219, "lines": ["5"]}, {"id": "e9eed2", "name": "Pantitlán.", "lat": 19.417117, "lon": -99.074168, "lines": ["4"]}, {"id": "319cb7", "name": "Indios Verdes L1", "lat": 19.496784, "lon": -99.11932, "lines": ["1"]}, {"id": "244d59", "name": "Indios Verdes L1.", "lat": 19.494039, "lon": -99.119634, "lines": ["1"]}, {"id": "1d6ab9", "name": "Dr. Gálvez", "lat": 19.340644, "lon": -99.190119, "lines": ["1"]}, {"id": "52920d", "name": "Calle 6 (ret)", "lat": 19.42071, "lon": -99.058338, "lines": ["4"]}, {"id": "09619f", "name": "Félix Cuevas", "lat": 19.373659, "lon": -99.178968, "lines": ["1"]}, {"id": "34b450", "name": "Rojo Gómez.", "lat": 19.383669, "lon": -99.066835, "lines": ["1"]}, {"id": "ef2555", "name": "Terminal 1 AICM.", "lat": 19.438818, "lon": -99.078104, "lines": ["4"]}];
+const ROUTE_TO_LINE={"19429": "3", "19430": "3", "19455": "3", "19456": "3", "19457": "3", "19458": "3", "19459": "3", "19460": "3", "19470": "6", "19471": "6", "19473": "6", "19472": "6", "19474": "6", "19475": "6", "19492": "1", "19491": "1", "19494": "1", "19493": "1", "19497": "1", "19498": "1", "19499": "1", "19500": "1", "19515": "4", "19516": "4", "19517": "4", "19518": "4", "19519": "4", "19520": "4", "19522": "4", "19523": "4", "19553": "5", "19555": "5", "19556": "5", "19557": "5", "19559": "5", "19558": "5", "19563": "2", "19562": "2", "19564": "2", "19565": "2", "19566": "2", "19567": "2", "19576": "7", "19577": "7", "19578": "7", "19579": "7", "19582": "7", "19583": "7", "19584": "7", "26882": "1", "26884": "1", "26885": "1", "26888": "1", "26889": "2", "26890": "2", "26891": "2", "26892": "2", "26895": "3", "26899": "3", "26901": "5", "26903": "5", "26906": "7", "26908": "5", "26909": "7", "27054": "4", "27055": "4", "27056": "4", "27057": "4", "19909": "7", "19908": "7", "19957": "7", "19956": "7", "19958": "7", "19959": "7", "19984": "1", "19983": "1", "19997": "1", "20016": "1", "20015": "1", "20211": "5", "20212": "5", "20264": "2", "20263": "2", "20295": "1", "20296": "1", "20439": "2", "20440": "2"};
+const PROXY="https://metrobus190.aexis19.workers.dev";
+const LC={'1':'#42A76B','2':'#42A76B','3':'#7A9A01','4':'#FF9A03','5':'#141982','6':'#E44599','7':'#116633'};
+
+const map=L.map('map',{center:[19.4326,-99.1332],zoom:12,zoomControl:false,preferCanvas:true});
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'©CARTO',subdomains:'abcd',maxZoom:19}).addTo(map);
+L.control.zoom({position:'topright'}).addTo(map);
+const stopLyr=L.layerGroup().addTo(map);
+const busLyr=L.layerGroup().addTo(map);
+let markers={},activeL=new Set(['1','2','3','4','5','6','7']),buses=[],isDemoMode=false;
+let rtUrl=null,rtExpiry=null,timer=null,credentials=null;
+
+function drawStops(){
+  stopLyr.clearLayers();
+  if(map.getZoom()<14)return;
+  STOPS_DATA.forEach(s=>{
+    if(!s.lines.some(l=>activeL.has(l)))return;
+    const c=LC[s.lines[0]]||'#888';
+    L.circleMarker([s.lat,s.lon],{radius:4,color:c,fillColor:c,fillOpacity:.9,weight:1.5})
+     .bindPopup('<div class="pt">'+s.name+'</div><div class="pr">L'+s.lines.join(' L')+'</div>',{maxWidth:180})
+     .addTo(stopLyr);
+  });
+}
+map.on('zoomend',drawStops);
+
+function bIcon(line,delay){
+  const c=LC[line]||'#888',tc=line==='4'?'#000':'#fff';
+  const sc=delay>300?'#f55a5a':delay>60?'#f5c842':'#3fcf60';
+  return L.divIcon({className:'',iconSize:[26,26],iconAnchor:[13,13],
+    html:'<div style="width:26px;height:26px;border-radius:50%;background:'+c+';border:2.5px solid '+sc+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:'+tc+';box-shadow:0 2px 8px rgba(0,0,0,.5)">'+(line||'?')+'</div>'});
+}
+function dlabel(sec){
+  if(sec==null)return{t:'Sin datos',cls:''};
+  if(sec<=60)return{t:'En tiempo',cls:'ok'};
+  if(sec<=300)return{t:'+'+Math.round(sec/60)+' min',cls:'warn'};
+  return{t:'+'+Math.round(sec/60)+' min TARDE',cls:'bad'};
+}
+function render(){
+  const cur=new Set(buses.map(v=>v.id));
+  Object.keys(markers).forEach(id=>{if(!cur.has(id)){busLyr.removeLayer(markers[id]);delete markers[id];}});
+  let total=0,ok=0,warn=0,late=0;
+  buses.forEach(v=>{
+    if(!activeL.has(v.line)){if(markers[v.id]){busLyr.removeLayer(markers[v.id]);delete markers[v.id];}return;}
+    if(!v.lat||!v.lon)return;
+    total++;const d=v.delay||0;
+    if(d<=60)ok++;else if(d<=300)warn++;else late++;
+    const ic=bIcon(v.line,d),dl=dlabel(v.delay);
+    const pop='<div class="pt"><span style="background:'+(LC[v.line]||'#888')+';color:'+(v.line==='4'?'#000':'#fff')+';padding:1px 6px;border-radius:3px;font-size:10px">L'+v.line+'</span> '+(v.vid||v.id)+'</div>'
+      +'<div class="pr">Estado: <span class="'+dl.cls+'">'+dl.t+'</span></div>'
+      +(v.speed!=null?'<div class="pr">Vel: <span>'+Math.round(v.speed)+' km/h</span></div>':'')
+      +(v.routeId?'<div class="pr">Ruta: <span>'+v.routeId+'</span></div>':'');
+    if(markers[v.id]){markers[v.id].setLatLng([v.lat,v.lon]).setIcon(ic);markers[v.id].getPopup()?.setContent(pop);}
+    else{markers[v.id]=L.marker([v.lat,v.lon],{icon:ic}).bindPopup(pop,{maxWidth:220}).addTo(busLyr);}
+  });
+  document.getElementById('s0').textContent=total||'0';
+  document.getElementById('s1').textContent=ok;
+  document.getElementById('s2').textContent=warn;
+  document.getElementById('s3').textContent=late;
+  const n=new Date();
+  document.getElementById('s4').textContent=n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0')+':'+n.getSeconds().toString().padStart(2,'0');
+}
+
+// PROTOBUF
+function rv(b,p){let r=0,s=0;while(p<b.length){const x=b[p++];r|=(x&127)<<s;s+=7;if(!(x&128))break;}return{v:r>>>0,p};}
+function rf(b,p){return{v:new DataView(b.buffer,b.byteOffset+p,4).getFloat32(0,true),p:p+4};}
+function rs(b){return new TextDecoder().decode(b);}
+function pm(buf,h){
+  let p=0;
+  while(p<buf.length){
+    let t,y;try{const r=rv(buf,p);t=r.v>>3;y=r.v&7;p=r.p;}catch(e){break;}
+    if(y===0){const r=rv(buf,p);p=r.p;h[t]?.(r.v);}
+    else if(y===1){p+=8;}
+    else if(y===2){const r=rv(buf,p);p=r.p;const s=buf.slice(p,p+r.v);h[t]?.(s);p+=r.v;}
+    else if(y===5){const r=rf(buf,p);h[t]?.(r.v);p+=4;}
+    else break;
+  }
+}
+function parseEntity(buf){
+  const e={};
+  pm(buf,{
+    1:s=>{e.id=rs(s);},
+    4:s=>{
+      const vp={};
+      pm(s,{
+        1:t=>{const tr={};pm(t,{1:s2=>{tr.tid=rs(s2);},2:s2=>{tr.rid=rs(s2);}});vp.trip=tr;},
+        2:s2=>{const vd={};pm(s2,{1:s3=>{vd.id=rs(s3);},2:s3=>{vd.lbl=rs(s3);}});vp.vd=vd;},
+        3:pos=>{const p={};pm(pos,{1:v=>{p.lat=v;},2:v=>{p.lon=v;},5:v=>{p.spd=v;}});vp.pos=p;},
+      });
+      e.vp=vp;
+    }
+  });
+  return e;
+}
+function parseFeed(buf){
+  const out=[];
+  pm(buf,{2:s=>{try{const e=parseEntity(s);if(e.vp?.pos?.lat)out.push(e);}catch(_){}}});
+  return out;
+}
+
+// AUTH — solo autentica cuando es necesario (primera vez o cuando expira)
+function isExpired(){
+  if(!rtExpiry)return true;
+  return new Date(rtExpiry.replace(' ','T')+'-06:00') < new Date();
+}
+
+async function ensureAuth(){
+  if(!isExpired()&&rtUrl)return; // token vigente, no re-autenticar
+  const res=await fetch(PROXY+'/partnerValidation',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({usuario:credentials.user,senha:credentials.pass})
+  });
+  if(!res.ok)throw new Error('Auth falló HTTP '+res.status);
+  const data=await res.json();
+  if(!data.urlRealTime)throw new Error('Sin urlRealTime: '+JSON.stringify(data).slice(0,100));
+  rtUrl=data.urlRealTime;
+  rtExpiry=data.expirationDateTime;
+}
+
+async function fetchRT(){
+  await ensureAuth();
+  // Fetch via worker proxy (worker tiene el ?url= handler)
+  const r=await fetch(PROXY+'/fetch?url='+encodeURIComponent(rtUrl));
+  if(!r.ok)throw new Error('Feed falló HTTP '+r.status);
+  return new Uint8Array(await r.arrayBuffer());
+}
+
+async function doRefresh(){
+  if(isDemoMode){buses=genDemo();render();drawStops();setStatus('live','Demo — '+buses.length+' unidades');return;}
+  if(!credentials)return;
+  setDot('busy');document.getElementById('status').textContent='Actualizando...';
+  try{
+    const buf=await fetchRT();
+    const ents=parseFeed(buf);
+    // Debug: log first entity to see route_id format
+    if(ents.length>0){
+      const sample=ents.slice(0,3).map(e=>e.vp?.trip?.rid||'no-rid');
+      console.log('Sample route_ids:',sample);
+    }
+    buses=ents.map(e=>(({
+      id:e.id,vid:e.vp.vd?.id||e.vp.vd?.lbl||e.id,
+      line:ROUTE_TO_LINE[e.vp.trip?.rid]||'?',
+      lat:e.vp.pos.lat,lon:e.vp.pos.lon,
+      speed:e.vp.pos.spd?e.vp.pos.spd*3.6:null,
+      delay:null,routeId:e.vp.trip?.rid||null
+    }))).filter(v=>v.line!=='?');
+    console.log('Parsed buses:',buses.length,'of',ents.length,'entities');
+    render();drawStops();
+    setStatus('live','En vivo — '+buses.length+' unidades');
+    toast('Actualizado: '+buses.length+' unidades');
+  }catch(err){
+    setDot('err');document.getElementById('status').textContent='Error: '+err.message;
+    toast(err.message);console.error(err);
+  }
+}
+
+function genDemo(){
+  const out=[];let id=1000;
+  ['1','2','3','4','5','6','7'].forEach(line=>{
+    const ls=STOPS_DATA.filter(s=>s.lines.includes(line));
+    for(let i=0;i<9&&i<ls.length;i++){
+      const s=ls[Math.floor(Math.random()*ls.length)];
+      const delays=[0,0,0,60,120,300,600];
+      out.push({id:String(id++),vid:'MB'+line+'-'+id,line,
+        lat:s.lat+(Math.random()-.5)*.004,lon:s.lon+(Math.random()-.5)*.004,
+        speed:Math.random()*35,delay:delays[Math.floor(Math.random()*delays.length)],routeId:null});
+    }
+  });
+  return out;
+}
+
+function setDot(st){const d=document.getElementById('dot');d.className=st;}
+function setStatus(st,txt){setDot(st);document.getElementById('status').textContent=txt;}
+let toastT;
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2500);}
+function showLoading(v,txt){const l=document.getElementById('loading');l.classList.toggle('show',v);if(txt)document.getElementById('ltxt').textContent=txt;}
+
+document.querySelectorAll('.lb').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const l=btn.dataset.l;
+    activeL.has(l)?activeL.delete(l):activeL.add(l);
+    btn.classList.toggle('on',activeL.has(l));
+    document.getElementById('btn-all').classList.toggle('on',activeL.size===7);
+    render();drawStops();
+  });
+});
+document.getElementById('btn-all').addEventListener('click',()=>{
+  const all=activeL.size===7;
+  all?activeL.clear():['1','2','3','4','5','6','7'].forEach(l=>activeL.add(l));
+  document.querySelectorAll('.lb').forEach(b=>b.classList.toggle('on',!all));
+  document.getElementById('btn-all').classList.toggle('on',!all);
+  render();drawStops();
+});
+document.getElementById('refresh-btn').addEventListener('click',doRefresh);
+
+document.getElementById('lbtn').addEventListener('click',async()=>{
+  const user=document.getElementById('iu').value.trim();
+  const pass=document.getElementById('ip').value.trim();
+  if(!user||!pass){showErr('Ingresa usuario y contraseña');return;}
+  const btn=document.getElementById('lbtn');
+  btn.disabled=true;btn.textContent='Conectando...';
+  showLoading(true,'Autenticando...');
+  credentials={user,pass};
+  try{
+    await ensureAuth();
+    document.getElementById('overlay').style.display='none';
+    showLoading(false);
+    setStatus('busy','Cargando feed...');
+    await doRefresh();
+    if(timer)clearInterval(timer);
+    // Refresh cada 30s, re-auth automático cuando expire
+    timer=setInterval(doRefresh,30000);
+  }catch(err){
+    showLoading(false);
+    showErr(err.message);
+    btn.disabled=false;btn.textContent='Conectar';
+    credentials=null;
+  }
+});
+document.getElementById('ip').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('lbtn').click();});
+document.getElementById('iu').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('ip').focus();});
+document.getElementById('demo-lnk').addEventListener('click',()=>{
+  isDemoMode=true;
+  document.getElementById('overlay').style.display='none';
+  buses=genDemo();render();drawStops();
+  setStatus('live','Demo — '+buses.length+' unidades');
+  if(timer)clearInterval(timer);
+  timer=setInterval(doRefresh,8000);
+});
+function showErr(msg){const e=document.getElementById('lerr');e.textContent=msg;e.style.display='block';}
+setStatus('','Esperando login...');
+</script>
+</body>
+</html>
